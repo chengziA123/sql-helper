@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQL 批量加引号助手（支持缩进）</title>
+    <title>SQL 批量加引号助手（横向/竖向）</title>
     <style>
         * { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            max-width: 860px;
+            max-width: 880px;
             margin: 30px auto;
             padding: 25px;
             background: #f8f9fa;
@@ -82,7 +82,6 @@
         .indent-group { display: flex; align-items: center; gap: 6px; }
         .indent-group label { font-weight: 500; color: #334155; }
 
-        /* 结果标题行：flex 布局，让复制按钮靠右 */
         .result-header {
             display: flex;
             justify-content: space-between;
@@ -100,11 +99,11 @@
 </head>
 <body>
 
-<h2>🧰 SQL 值批量包裹工具 <small>单引号 / 双引号 · 自定义缩进</small></h2>
+<h2>🧰 SQL 值批量包裹工具 <small>单/双引号 · 竖向/横向</small></h2>
 
 <div class="tip">
     💡 支持按 <strong>换行</strong>、<strong>逗号</strong>、<strong>空格</strong>、<strong>制表符</strong> 分隔的原始数据。<br>
-    ✨ <strong>缩进空格数</strong>：在每行值前添加指定数量的空格，方便 SQL 格式化（设为 0 则不缩进）。
+    ↔️ <strong>横向排列</strong>：所有值在同一行，用英文逗号+空格分隔（忽略缩进）。
 </div>
 
 <!-- 输入区 -->
@@ -117,6 +116,12 @@
         <span style="font-weight:500;">引用符号：</span>
         <label><input type="radio" name="quoteType" value="single" checked> 单引号 <code>' '</code></label>
         <label><input type="radio" name="quoteType" value="double"> 双引号 <code>" "</code></label>
+    </div>
+
+    <div class="form-group">
+        <span style="font-weight:500;">输出排列：</span>
+        <label><input type="radio" name="layout" value="vertical" checked> 竖向（每行一个）</label>
+        <label><input type="radio" name="layout" value="horizontal"> 横向（同一行）</label>
     </div>
 
     <div class="form-group">
@@ -141,16 +146,14 @@
     <button class="btn btn-outline" onclick="clearAll()">🗑️ 清空</button>
 </div>
 
-<!-- 结果区域：标题行 + 复制按钮 -->
+<!-- 结果区域 -->
 <div class="result-header">
     <label>📋 结果：</label>
     <button class="btn btn-success" onclick="copyResult()">📄 一键复制</button>
 </div>
 
-<!-- 输出框 -->
 <div class="output-box" id="output"><span class="placeholder">等待生成...</span></div>
 
-<!-- 状态栏（只保留状态信息） -->
 <div class="status-bar">
     <span id="statusInfo">📊 就绪</span>
 </div>
@@ -165,6 +168,10 @@
         return document.querySelector('input[name="quoteType"]:checked').value === 'single' ? "'" : '"';
     }
 
+    function getLayout() {
+        return document.querySelector('input[name="layout"]:checked').value; // 'vertical' or 'horizontal'
+    }
+
     function getIndent() {
         const val = parseInt(document.getElementById('indentSpaces').value, 10);
         return isNaN(val) || val < 0 ? 0 : val;
@@ -172,6 +179,7 @@
 
     function parseInput() {
         const raw = document.getElementById('inputData').value;
+        // 按多种分隔符拆分：换行、逗号（中英文）、空格、制表符
         let items = raw.split(/[\n,，、\t\s]+/).map(s => s.trim()).filter(s => s !== '');
         if (document.getElementById('removeDuplicates').checked) {
             items = [...new Set(items)];
@@ -191,18 +199,38 @@
         }
 
         const quote = getQuoteChar();
+        const layout = getLayout();
         const indent = getIndent();
         const indentStr = ' '.repeat(indent);
 
-        const wrapped = items.map(item => `${indentStr}${quote}${item}${quote}`);
-        let result = wrapped.join(',\n');
+        // 包裹每个值
+        const wrapped = items.map(item => `${quote}${item}${quote}`);
 
+        let result = '';
+        if (layout === 'vertical') {
+            // 竖向：每行一个，前面加缩进
+            const lines = wrapped.map(val => `${indentStr}${val}`);
+            result = lines.join(',\n');
+        } else { // horizontal
+            // 横向：同一行，用逗号+空格分隔
+            result = wrapped.join(', ');
+        }
+
+        // 是否包裹成 IN (...)
         if (document.getElementById('wrapInClause').checked) {
-            result = `IN (\n${result}\n)`;
+            if (layout === 'vertical') {
+                // 竖向：IN (\n  值,\n  值\n)
+                result = `IN (\n${result}\n)`;
+            } else {
+                // 横向：IN (值1, 值2)
+                result = `IN (${result})`;
+            }
         }
 
         outputDiv.textContent = result;
-        statusSpan.textContent = `✅ 共 ${items.length} 条记录，缩进 ${indent} 空格`;
+        const layoutLabel = layout === 'vertical' ? '竖向' : '横向';
+        const indentInfo = layout === 'vertical' ? `，缩进 ${indent} 空格` : '';
+        statusSpan.textContent = `✅ 共 ${items.length} 条记录，排列：${layoutLabel}${indentInfo}`;
     }
 
     function changeCase(type) {
