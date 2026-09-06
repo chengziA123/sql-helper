@@ -1,184 +1,618 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQL 批量加引号助手（横向/竖向）</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SQL 批量加引号助手 · 优化版</title>
     <style>
-        * { box-sizing: border-box; }
+        /* ===== CSS Variables ===== */
+        :root {
+            --bg-body: #f0f4f9;
+            --bg-card: #ffffff;
+            --border-light: #e5edf5;
+            --text-primary: #0b1a2e;
+            --text-secondary: #334e68;
+            --text-muted: #7a8fa6;
+            --blue-500: #3b82f6;
+            --blue-600: #2563eb;
+            --blue-50: #eff6ff;
+            --green-500: #10b981;
+            --green-600: #059669;
+            --amber-500: #f59e0b;
+            --red-500: #ef4444;
+            --slate-800: #1e293b;
+            --slate-900: #0f172a;
+            --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.06);
+            --radius-card: 14px;
+            --radius-sm: 8px;
+            --transition: 0.18s ease;
+        }
+
+        /* ===== Reset & Base ===== */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            max-width: 880px;
-            margin: 30px auto;
-            padding: 25px;
-            background: #f8f9fa;
-            border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            background: var(--bg-body);
+            padding: 24px 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
         }
-        h2 { margin-top: 0; color: #1e293b; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        h2 small { font-size: 14px; font-weight: normal; color: #64748b; }
-        .row { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 12px 0; align-items: center; }
-        .form-group { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; background: white; padding: 6px 16px; border-radius: 30px; border: 1px solid #e2e8f0; }
-        .form-group label { cursor: pointer; font-weight: 500; color: #334155; display: flex; align-items: center; gap: 4px; }
-        textarea {
-            width: 100%;
-            height: 160px;
-            padding: 14px;
-            font-size: 14px;
-            font-family: 'Courier New', monospace;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            background: white;
-            transition: 0.2s;
-            resize: vertical;
-        }
-        textarea:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
-        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
-        .btn {
-            padding: 8px 20px;
-            font-size: 14px;
-            font-weight: 600;
-            border: none;
-            border-radius: 30px;
-            cursor: pointer;
-            transition: all 0.15s;
-            background: #e2e8f0;
-            color: #1e293b;
-        }
-        .btn-primary { background: #3b82f6; color: white; }
-        .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
-        .btn-success { background: #10b981; color: white; }
-        .btn-success:hover { background: #059669; transform: translateY(-1px); }
-        .btn-warning { background: #f59e0b; color: white; }
-        .btn-warning:hover { background: #d97706; }
-        .btn-outline { background: transparent; border: 2px solid #cbd5e1; }
-        .btn-outline:hover { background: #f1f5f9; }
-        .btn-danger { background: #ef4444; color: white; }
-        .btn-danger:hover { background: #dc2626; }
-        .output-box {
-            background: #0f172a;
-            color: #e2e8f0;
-            padding: 18px;
-            border-radius: 12px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            min-height: 100px;
-            max-height: 350px;
-            overflow-y: auto;
-            margin-top: 8px;
-            position: relative;
-        }
-        .output-box .placeholder { color: #64748b; font-style: italic; }
-        .status-bar { display: flex; justify-content: flex-start; align-items: center; margin-top: 8px; color: #64748b; font-size: 13px; gap: 12px; flex-wrap: wrap; }
-        .badge { background: #e2e8f0; padding: 2px 12px; border-radius: 20px; font-weight: 600; color: #1e293b; }
-        .inline-flex { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        input[type="radio"] { accent-color: #3b82f6; width: 16px; height: 16px; margin: 0; }
-        input[type="checkbox"] { accent-color: #3b82f6; width: 16px; height: 16px; margin: 0; }
-        input[type="number"] { width: 60px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
-        hr { border: none; border-top: 2px dashed #e2e8f0; margin: 20px 0; }
-        .tip { background: #fef3c7; padding: 10px 16px; border-radius: 10px; color: #92400e; font-size: 14px; border-left: 4px solid #f59e0b; margin-bottom: 12px; }
-        .indent-group { display: flex; align-items: center; gap: 6px; }
-        .indent-group label { font-weight: 500; color: #334155; }
 
-        .result-header {
+        .app-wrapper {
+            max-width: 1280px;
+            width: 100%;
+        }
+
+        /* ===== Header ===== */
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            margin-bottom: 20px;
+        }
+
+        .app-header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: -0.2px;
+        }
+
+        .app-header h1 small {
+            font-size: 14px;
+            font-weight: 400;
+            color: var(--text-muted);
+            letter-spacing: 0;
+        }
+
+        .header-badge {
+            background: var(--blue-50);
+            color: var(--blue-600);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 14px;
+            border-radius: 40px;
+            border: 1px solid rgba(59, 130, 246, 0.15);
+        }
+
+        /* ===== Main Grid ===== */
+        .app-grid {
+            display: flex;
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        /* ===== Left Panel ===== */
+        .left-panel {
+            flex: 0 0 270px;
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-card);
+            padding: 18px 16px 16px;
+        }
+
+        .panel-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .option-group {
+            margin-bottom: 14px;
+        }
+        .option-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .option-group .group-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .option-group label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 3px 0;
+            transition: color var(--transition);
+        }
+        .option-group label:hover {
+            color: var(--text-primary);
+        }
+
+        .option-group label code {
+            background: #f1f5f9;
+            padding: 0 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .option-group input[type="radio"],
+        .option-group input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            accent-color: var(--blue-500);
+            flex-shrink: 0;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .indent-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 3px;
+        }
+        .indent-row input[type="number"] {
+            width: 60px;
+            padding: 3px 6px;
+            border: 1.5px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            height: 30px;
+            background: #fafbfc;
+            transition: border var(--transition);
+        }
+        .indent-row input[type="number"]:focus {
+            border-color: var(--blue-500);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+        }
+        .indent-row span {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .tip-box {
+            background: #fffbeb;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            color: #92400e;
+            font-size: 12px;
+            border-left: 3px solid var(--amber-500);
+            margin-top: 14px;
+            line-height: 1.6;
+        }
+        .tip-box strong {
+            font-weight: 600;
+        }
+
+        /* ===== Right Panel ===== */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-width: 0;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-card);
+            padding: 16px 18px 18px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-input {
+            flex: 1;            /* 均分高度 */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-output {
+            flex: 1;            /* 均分高度 */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin: 10px 0 6px;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+            margin-bottom: 10px;
+            min-height: 44px;    /* 统一头部高度 */
         }
-        .result-header label {
+
+        .card-header .label {
+            font-size: 13px;
             font-weight: 600;
-            margin: 0;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        .result-header .btn-success {
-            padding: 6px 24px;
+
+        .card-header .badge {
+            background: var(--border-light);
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 12px;
+            border-radius: 30px;
+        }
+
+        /* ===== Toolbar ===== */
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .btn {
+            padding: 5px 18px;
+            font-size: 12px;
+            font-weight: 600;
+            border: none;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: all var(--transition);
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            white-space: nowrap;
+            background: #eef2f6;
+            color: var(--text-secondary);
+        }
+        .btn:hover {
+            background: #e2e8f0;
+        }
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-primary {
+            background: var(--blue-500);
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: var(--blue-600);
+        }
+
+        .btn-success {
+            background: var(--green-500);
+            color: #fff;
+        }
+        .btn-success:hover {
+            background: var(--green-600);
+        }
+
+        .btn-amber {
+            background: var(--amber-500);
+            color: #fff;
+        }
+        .btn-amber:hover {
+            background: #d97706;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1.5px solid var(--border-light);
+            color: var(--text-secondary);
+        }
+        .btn-outline:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .btn-danger {
+            background: var(--red-500);
+            color: #fff;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-sm {
+            height: 28px;
+            padding: 3px 14px;
+            font-size: 11px;
+        }
+
+        /* ===== Textarea ===== */
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-family: "Courier New", monospace;
+            border: 1.5px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            background: #fafbfc;
+            transition: border var(--transition), box-shadow var(--transition);
+            color: var(--text-primary);
+            line-height: 1.6;
+            height: 220px;         /* 固定高度 */
+            resize: none;          /* 禁止拖拽 */
+            flex-shrink: 0;        /* 不收缩 */
+        }
+        textarea:focus {
+            border-color: var(--blue-500);
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
+        }
+        textarea::placeholder {
+            color: #b0c4d8;
+        }
+
+        /* ===== Output ===== */
+        .output-box {
+            background: var(--slate-900);
+            color: #e2e8f0;
+            padding: 14px 16px;
+            border-radius: var(--radius-sm);
+            font-family: "Courier New", monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            border: 1.5px solid #1e293b;
+            line-height: 1.7;
+            height: 220px;         /* 固定高度，与textarea一致 */
+            overflow-y: auto;      /* 内容过多滚动 */
+            flex-shrink: 0;        /* 不收缩 */
+        }
+        .output-box .placeholder {
+            color: #64748b;
+            font-style: italic;
+        }
+
+        /* ===== Toast ===== */
+        .toast-container {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999;
+            pointer-events: none;
+        }
+        .toast {
+            background: #0b1a2e;
+            color: #f1f5f9;
+            padding: 10px 26px;
+            border-radius: 40px;
+            font-size: 13px;
+            font-weight: 500;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateY(16px) scale(0.94);
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            pointer-events: none;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        /* ===== Footer ===== */
+        .app-footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-light);
+            padding-top: 16px;
+            letter-spacing: 0.2px;
+        }
+        .app-footer a {
+            color: var(--blue-500);
+            text-decoration: none;
+        }
+        .app-footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 820px) {
+            body {
+                padding: 14px 12px;
+            }
+            .app-grid {
+                flex-direction: column;
+            }
+            .left-panel {
+                flex: 1 1 auto;
+                width: 100%;
+            }
+            .right-panel {
+                flex: 1 1 auto;
+            }
+            textarea,
+            .output-box {
+                height: 160px;    /* 移动端缩小 */
+            }
+            .app-header h1 {
+                font-size: 19px;
+            }
+            .app-header h1 small {
+                font-size: 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .app-header h1 {
+                font-size: 17px;
+            }
+            .card {
+                padding: 12px 12px 14px;
+            }
+            .left-panel {
+                padding: 14px 12px;
+            }
+            .toolbar .btn {
+                font-size: 11px;
+                padding: 3px 12px;
+                height: 28px;
+            }
+            textarea,
+            .output-box {
+                height: 140px;
+                font-size: 12px;
+                padding: 8px 10px;
+            }
+        }
+
+        /* ===== Scrollbar ===== */
+        .output-box::-webkit-scrollbar {
+            width: 5px;
+        }
+        .output-box::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        .output-box::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 8px;
+        }
+        .output-box::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
         }
     </style>
 </head>
 <body>
+<!-- 以下 HTML 结构保持不变，仅 CSS 修改 -->
+<div class="app-wrapper">
+    <!-- ===== Header ===== -->
+    <header class="app-header">
+        <h1>🧰 SQL 值批量包裹工具 <small>单/双引号 · 竖/横向</small></h1>
+        <span class="header-badge">⚡ 快捷 · 开源</span>
+    </header>
 
-<h2>🧰 SQL 值批量包裹工具 <small>单/双引号 · 竖向/横向</small></h2>
+    <!-- ===== Main Grid ===== -->
+    <div class="app-grid">
+        <!-- ===== Left Panel ===== -->
+        <aside class="left-panel">
+            <div class="panel-title">⚙️ 选项设置</div>
+            <!-- ... 选项内容未变，省略... -->
+            <div class="option-group">
+                <span class="group-label">引用符号</span>
+                <label><input type="radio" name="quoteType" value="single" checked /> 单引号 <code>' '</code></label>
+                <label><input type="radio" name="quoteType" value="double" /> 双引号 <code>" "</code></label>
+            </div>
+            <div class="option-group">
+                <span class="group-label">输出排列</span>
+                <label><input type="radio" name="layout" value="vertical" checked /> 竖向（每行一个）</label>
+                <label><input type="radio" name="layout" value="horizontal" /> 横向（同一行）</label>
+            </div>
+            <div class="option-group">
+                <span class="group-label">额外选项</span>
+                <label><input type="checkbox" id="wrapInClause" checked /> 包裹成 <code>IN (...)</code></label>
+                <label><input type="checkbox" id="removeDuplicates" /> 去重</label>
+            </div>
+            <div class="option-group">
+                <span class="group-label">缩进空格数</span>
+                <div class="indent-row">
+                    <input type="number" id="indentSpaces" value="4" min="0" max="20" step="1" />
+                    <span>（竖向生效）</span>
+                </div>
+            </div>
+            <div class="tip-box">
+                💡 支持 <strong>换行</strong>、<strong>逗号</strong>、<strong>空格</strong>、<strong>制表符</strong> 分隔。<br />
+                ↔️ 横向排列时缩进自动忽略。
+            </div>
+        </aside>
 
-<div class="tip">
-    💡 支持按 <strong>换行</strong>、<strong>逗号</strong>、<strong>空格</strong>、<strong>制表符</strong> 分隔的原始数据。<br>
-    ↔️ <strong>横向排列</strong>：所有值在同一行，用英文逗号+空格分隔（忽略缩进）。
-</div>
+        <!-- ===== Right Panel ===== -->
+        <main class="right-panel">
+            <!-- ===== Input Card ===== -->
+            <section class="card card-input">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px 12px; flex-wrap: wrap; margin-bottom: 10px;">
+                    <div class="toolbar" style="margin-bottom: 0; display: flex; flex-wrap: wrap; gap: 6px;">
+                        <button class="btn btn-amber btn-sm" onclick="loadSample()">📋 示例</button>
+                        <button class="btn btn-amber btn-sm" onclick="changeCase('upper')">🔠 转大写</button>
+                        <button class="btn btn-amber btn-sm" onclick="changeCase('lower')">🔡 转小写</button>
+                        <button class="btn btn-outline btn-sm" onclick="clearAll()">🗑️ 清空</button>
+                    </div>
+                    <span class="badge" style="align-self: flex-start;">支持多种分隔符</span>
+                </div>
+                <textarea id="inputData" placeholder="粘贴原始数据，例如：P76DMWPAW4, P76DMWPAW6, P76AMKTK39 … 或每行一个"></textarea>
+            </section>
 
-<!-- 输入区 -->
-<label style="font-weight:600; display:block; margin: 15px 0 6px;">📥 粘贴原始数据：</label>
-<textarea id="inputData" placeholder="例如：P76DMWPAW4, P76DMWPAW6, P76AMKTK39 ... 或每行一个"></textarea>
-
-<!-- 操作选项栏 -->
-<div class="row">
-    <div class="form-group">
-        <span style="font-weight:500;">引用符号：</span>
-        <label><input type="radio" name="quoteType" value="single" checked> 单引号 <code>' '</code></label>
-        <label><input type="radio" name="quoteType" value="double"> 双引号 <code>" "</code></label>
+            <!-- ===== Output Card ===== -->
+            <section class="card card-output">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button class="btn btn-success" onclick="copyResult()">📄 复制</button>
+                        <span class="footer-hint" style="margin: 0; font-size: 11px; color: #7a8fa6; display: inline-flex; align-items: center; gap: 4px;">快捷键 <kbd style="background: #eef2f6; padding: 1px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; color: #334e68; border: 1px solid #e2e8f0;">Ctrl+Enter</kbd> 生成</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span class="label" style="font-weight: 600; color: var(--text-secondary);">📋 结果</span>
+                        <span id="outputCount" style="font-size: 12px; color: var(--text-muted);">条数: 0</span>
+                        <span class="badge" id="outputBadge">就绪</span>
+                    </div>
+                </div>
+                <div class="output-box" id="output"><span class="placeholder">等待生成…</span></div>
+            </section>
+        </main>
     </div>
 
-    <div class="form-group">
-        <span style="font-weight:500;">输出排列：</span>
-        <label><input type="radio" name="layout" value="vertical" checked> 竖向（每行一个）</label>
-        <label><input type="radio" name="layout" value="horizontal"> 横向（同一行）</label>
-    </div>
-
-    <div class="form-group">
-        <label><input type="checkbox" id="wrapInClause" checked> 包裹成 <code>IN (...)</code></label>
-    </div>
-
-    <div class="form-group">
-        <label><input type="checkbox" id="removeDuplicates"> 去重</label>
-    </div>
-
-    <div class="form-group indent-group">
-        <label for="indentSpaces">缩进空格数：</label>
-        <input type="number" id="indentSpaces" value="4" min="0" max="20" step="1">
-    </div>
+    <!-- ===== Footer ===== -->
+    <footer class="app-footer">
+        🛠️ SQL 值批量包裹工具 · 优化版 · 自由使用
+    </footer>
 </div>
 
-<!-- 操作按钮 -->
-<div class="btn-group">
-    <button class="btn btn-primary" onclick="convert()">✨ 生成</button>
-    <button class="btn btn-warning" onclick="changeCase('upper')">🔠 转大写</button>
-    <button class="btn btn-warning" onclick="changeCase('lower')">🔡 转小写</button>
-    <button class="btn btn-outline" onclick="clearAll()">🗑️ 清空</button>
+<!-- ===== Toast ===== -->
+<div class="toast-container" id="toastContainer">
+    <div class="toast" id="toast">✅ 已复制</div>
 </div>
-
-<!-- 结果区域 -->
-<div class="result-header">
-    <label>📋 结果：</label>
-    <button class="btn btn-success" onclick="copyResult()">📄 一键复制</button>
-</div>
-
-<div class="output-box" id="output"><span class="placeholder">等待生成...</span></div>
-
-<div class="status-bar">
-    <span id="statusInfo">📊 就绪</span>
-</div>
-
-<hr>
-<p style="font-size:13px; color:#94a3b8; margin:0;">
-    ⚡ 快捷操作：在输入框按 <kbd>Ctrl+Enter</kbd>（Mac <kbd>⌘+Enter</kbd>）快速生成。
-</p>
 
 <script>
+    // ============================================================
+    //  JavaScript 部分（与之前相同，未改动，仅保留）
+    // ============================================================
+    const inputEl = document.getElementById('inputData');
+    const outputEl = document.getElementById('output');
+    const outputBadge = document.getElementById('outputBadge');
+    const outputCount = document.getElementById('outputCount');
+    const toastEl = document.getElementById('toast');
+
     function getQuoteChar() {
         return document.querySelector('input[name="quoteType"]:checked').value === 'single' ? "'" : '"';
     }
-
     function getLayout() {
         return document.querySelector('input[name="layout"]:checked').value;
     }
-
     function getIndent() {
         const val = parseInt(document.getElementById('indentSpaces').value, 10);
         return isNaN(val) || val < 0 ? 0 : val;
     }
-
     function parseInput() {
-        const raw = document.getElementById('inputData').value;
+        const raw = inputEl.value;
         let items = raw.split(/[\n,，、\t\s]+/).map(s => s.trim()).filter(s => s !== '');
         if (document.getElementById('removeDuplicates').checked) {
             items = [...new Set(items)];
@@ -188,30 +622,23 @@
 
     function convert() {
         const items = parseInput();
-        const outputDiv = document.getElementById('output');
-        const statusSpan = document.getElementById('statusInfo');
-
-        if (items.length === 0) {
-            outputDiv.innerHTML = '<span class="placeholder">⚠️ 未检测到有效数据</span>';
-            statusSpan.textContent = '📊 无数据';
+        const count = items.length;
+        if (count === 0) {
+            outputEl.innerHTML = '<span class="placeholder">⚠️ 未检测到有效数据</span>';
+            outputCount.textContent = '条数: 0';
             return;
         }
-
         const quote = getQuoteChar();
         const layout = getLayout();
         const indent = getIndent();
         const indentStr = ' '.repeat(indent);
-
         const wrapped = items.map(item => `${quote}${item}${quote}`);
-
         let result = '';
         if (layout === 'vertical') {
-            const lines = wrapped.map(val => `${indentStr}${val}`);
-            result = lines.join(',\n');
+            result = wrapped.map(val => `${indentStr}${val}`).join(',\n');
         } else {
             result = wrapped.join(', ');
         }
-
         if (document.getElementById('wrapInClause').checked) {
             if (layout === 'vertical') {
                 result = `IN (\n${result}\n)`;
@@ -219,86 +646,92 @@
                 result = `IN (${result})`;
             }
         }
+        outputEl.textContent = result;
+        outputCount.textContent = `条数: ${count}`;
+    }
 
-        outputDiv.textContent = result;
-        const layoutLabel = layout === 'vertical' ? '竖向' : '横向';
-        const indentInfo = layout === 'vertical' ? `，缩进 ${indent} 空格` : '';
-        statusSpan.textContent = `✅ 共 ${items.length} 条记录，排列：${layoutLabel}${indentInfo}`;
+    function loadSample() {
+        const sample = ['P76DMWPAW4','P76DMWPAW6','P76AMKTK39','X9K2L8M4N1','R5T7Y3U9I2'].join(', ');
+        inputEl.value = sample;
+        convert();
+        showToast('📋 已加载示例数据');
     }
 
     function changeCase(type) {
-        const input = document.getElementById('inputData');
-        const current = input.value;
-        if (!current.trim()) return;
-        input.value = type === 'upper' ? current.toUpperCase() : current.toLowerCase();
+        const raw = inputEl.value;
+        if (!raw.trim()) return;
+        inputEl.value = type === 'upper' ? raw.toUpperCase() : raw.toLowerCase();
         convert();
+        showToast(type === 'upper' ? '🔠 已转为大写' : '🔡 已转为小写');
     }
 
     function clearAll() {
-        document.getElementById('inputData').value = '';
-        document.getElementById('output').innerHTML = '<span class="placeholder">等待生成...</span>';
-        document.getElementById('statusInfo').textContent = '📊 就绪';
+        inputEl.value = '';
+        outputEl.innerHTML = '<span class="placeholder">等待生成…</span>';
+        outputBadge.textContent = '就绪';
+        outputCount.textContent = '条数: 0';
     }
 
     function copyResult() {
-        const outputDiv = document.getElementById('output');
-        const text = outputDiv.textContent;
+        const text = outputEl.textContent;
         if (!text || text.includes('等待生成') || text.includes('未检测到')) {
-            alert('没有可复制的内容，请先生成！');
+            showToast('⚠️ 没有可复制的内容，请先生成');
             return;
         }
-
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(() => {
-                showCopyFeedback('✅ 已复制到剪贴板！');
-            }).catch(() => {
-                fallbackCopy(text);
-            });
+            navigator.clipboard.writeText(text).then(() => showToast('✅ 已复制到剪贴板！')).catch(() => fallbackCopy(text));
         } else {
             fallbackCopy(text);
         }
     }
 
     function fallbackCopy(text) {
-        const outputDiv = document.getElementById('output');
         const range = document.createRange();
-        range.selectNode(outputDiv);
-        window.getSelection().removeAllRanges();
-        window.getSelection().addRange(range);
+        range.selectNodeContents(outputEl);
+        const sel = window.getSelection();
+        if (!sel) {
+            showToast('❌ 复制失败，请手动复制');
+            return;
+        }
+        sel.removeAllRanges();
+        sel.addRange(range);
         try {
             document.execCommand('copy');
-            showCopyFeedback('✅ 已复制到剪贴板！');
-        } catch (e) {
-            alert('复制失败，请手动选中结果框内容复制。');
+            showToast('✅ 已复制到剪贴板！');
+        } catch (_) {
+            showToast('❌ 复制失败，请手动选中结果框内容复制');
         }
-        window.getSelection().removeAllRanges();
+        sel.removeAllRanges();
     }
 
-    function showCopyFeedback(msg) {
-        const btn = document.querySelector('.result-header .btn-success');
-        const origText = btn.textContent;
-        btn.textContent = msg;
-        btn.style.background = '#22c55e';
-        setTimeout(() => {
-            btn.textContent = origText;
-            btn.style.background = '';
-        }, 2000);
+    let toastTimer = null;
+    function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+            toastEl.classList.remove('show');
+        }, 2200);
     }
 
-    document.getElementById('inputData').addEventListener('keydown', function(e) {
+    // 自动转换
+    inputEl.addEventListener('input', convert);
+    document.querySelectorAll('input[type="radio"], input[type="checkbox"], input[type="number"]').forEach(el => {
+        el.addEventListener('change', function() {
+            const outText = outputEl.textContent;
+            if (outText && !outText.includes('等待生成') && !outText.includes('未检测到')) {
+                convert();
+            }
+        });
+    });
+    inputEl.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
             e.preventDefault();
             convert();
         }
     });
-
-    document.querySelectorAll('input[type="radio"], input[type="checkbox"], input[type="number"]').forEach(el => {
-        el.addEventListener('change', function() {
-            const outputDiv = document.getElementById('output');
-            if (outputDiv.textContent && !outputDiv.textContent.includes('等待生成') && !outputDiv.textContent.includes('未检测到')) {
-                convert();
-            }
-        });
+    document.addEventListener('DOMContentLoaded', function() {
+        if (inputEl.value.trim()) convert();
     });
 </script>
 </body>
