@@ -346,6 +346,31 @@
             font-size: 10px;
         }
 
+        /* ===== 下拉选择器 - 无底色，紧凑文字与箭头间距 ===== */
+        .mode-select {
+            height: 24px;
+            font-size: 10px;
+            border-radius: 40px;
+            border: 1.5px solid var(--border-light);
+            background: #ffffff;
+            color: var(--text-secondary);
+            padding: 0 4px;
+            cursor: pointer;
+            font-weight: 600;
+            outline: none;
+            transition: border var(--transition);
+            width: auto;
+            min-width: 56px;
+            letter-spacing: 0.2px;
+        }
+        .mode-select:hover {
+            border-color: var(--blue-500);
+        }
+        .mode-select:focus {
+            border-color: var(--blue-500);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+        }
+
         /* ===== 双栏容器（输入 & 输出） ===== */
         .split-panel {
             display: flex;
@@ -384,7 +409,7 @@
         .split-panel .translation-box {
             background: #f8fafc;
         }
-        /* 输出框的只读样式（使用textarea） */
+        /* 输出框的只读样式（使用div） */
         .split-panel .output-box {
             background: #f1f5f9;
             color: #1e293b;
@@ -509,6 +534,12 @@
                 padding: 2px 10px;
                 height: 24px;
             }
+            .mode-select {
+                height: 22px;
+                font-size: 9px;
+                padding: 0 3px;
+                min-width: 48px;
+            }
             .split-panel {
                 height: 100px;
             }
@@ -554,7 +585,6 @@
 
             <div class="option-group">
                 <span class="group-label">额外选项</span>
-                <!-- 修改：移除 checked，默认不包裹 IN -->
                 <label><input type="checkbox" id="wrapInClause" /> 包裹成 <code>IN (...)</code></label>
                 <label><input type="checkbox" id="removeDuplicates" /> 去重</label>
             </div>
@@ -596,12 +626,26 @@
 
             <!-- ===== Output Card ===== -->
             <section class="card card-output">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 4px 10px; flex-wrap: wrap; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
+                <!-- ===== 头部单行 flex：左（复制+快捷键），中（flex:1，查询+复制模板，左对齐，并整体右移16ch），右（结果+条数+就绪，右对齐） ===== -->
+                <div class="card-header" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+                    <!-- 左 -->
+                    <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto;">
                         <button class="btn btn-success btn-sm" onclick="copyResult()">📄 复制</button>
                         <span class="footer-hint" style="margin: 0; font-size: 10px; color: #7a8fa6; display: inline-flex; align-items: center; gap: 3px;">快捷键 <kbd style="background: #eef2f6; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; color: #334e68; border: 1px solid #e2e8f0;">Ctrl+Enter</kbd> 生成</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 5px;">
+                    <!-- 中：flex:1，左对齐，增加 padding-left: 16ch 实现整体右移两个8ch -->
+                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; justify-content: flex-start; padding-left: 16ch;">
+                        <select id="sqlMode" class="mode-select">
+                            <option value="select">查询</option>
+                            <option value="insert">增加</option>
+                            <option value="delete">删除</option>
+                            <option value="update">修改</option>
+                        </select>
+                        <!-- 复制模板按钮 -->
+                        <button class="btn btn-success btn-sm" onclick="copyTemplateResult()">📋 复制模板</button>
+                    </div>
+                    <!-- 右：右对齐 -->
+                    <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto;">
                         <span class="label" style="font-weight: 600; color: var(--text-secondary);">📋 结果</span>
                         <span id="outputCount" style="font-size: 11px; color: var(--text-muted);">条数: 0</span>
                         <span class="badge" id="outputBadge">就绪</span>
@@ -611,7 +655,7 @@
                 <!-- 输出区域双栏 -->
                 <div class="split-panel">
                     <div class="output-box" id="output"><span class="placeholder">等待生成…</span></div>
-                    <div class="output-box" id="outputPlain"><span class="placeholder">纯值列表</span></div>
+                    <div class="output-box" id="outputPlain"><span class="placeholder">请选择模式</span></div>
                 </div>
             </section>
 
@@ -640,6 +684,7 @@
     const outputBadge = document.getElementById('outputBadge');
     const outputCount = document.getElementById('outputCount');
     const toastEl = document.getElementById('toast');
+    const sqlModeSelect = document.getElementById('sqlMode');
 
     // ============================================================
     //  翻译功能（使用 mymemory 免费 API，带防抖）
@@ -703,12 +748,26 @@
         return items;
     }
 
+    // ===== 生成 SQL 模板 =====
+    function getSqlTemplate(mode, count) {
+        if (count === 0) return '';
+        const placeholders = Array(count).fill('?').join(', ');
+        const templates = {
+            select: `SELECT * FROM {表名} WHERE {字段} IN (${placeholders})`,
+            insert: `INSERT INTO {表名} ({字段列表}) VALUES (${placeholders})`,
+            delete: `DELETE FROM {表名} WHERE {字段} IN (${placeholders})`,
+            update: `UPDATE {表名} SET {字段} = {值} WHERE {字段} IN (${placeholders})`
+        };
+        return templates[mode] || '';
+    }
+
     function convert() {
         const items = parseInput();
         const count = items.length;
+        // 更新左侧输出
         if (count === 0) {
             outputEl.innerHTML = '<span class="placeholder">⚠️ 未检测到有效数据</span>';
-            outputPlainEl.innerHTML = '<span class="placeholder">纯值列表</span>';
+            outputPlainEl.innerHTML = '<span class="placeholder">请先输入数据</span>';
             outputCount.textContent = '条数: 0';
             return;
         }
@@ -717,15 +776,13 @@
         const indent = getIndent();
         const indentStr = ' '.repeat(indent);
         const wrapped = items.map(item => `${quote}${item}${quote}`);
-        // 纯值列表（始终横向逗号分隔，不包裹 IN）
-        const plainResult = wrapped.join(', ');
+        // 左侧结果
         let result = '';
         if (layout === 'vertical') {
             result = wrapped.map(val => `${indentStr}${val}`).join(',\n');
         } else {
             result = wrapped.join(', ');
         }
-        // 是否包裹 IN
         if (document.getElementById('wrapInClause').checked) {
             if (layout === 'vertical') {
                 result = `IN (\n${result}\n)`;
@@ -734,8 +791,16 @@
             }
         }
         outputEl.textContent = result;
-        outputPlainEl.textContent = plainResult;
         outputCount.textContent = `条数: ${count}`;
+
+        // ===== 更新右侧 SQL 模板 =====
+        const mode = sqlModeSelect.value;
+        const template = getSqlTemplate(mode, count);
+        if (template) {
+            outputPlainEl.textContent = template;
+        } else {
+            outputPlainEl.innerHTML = '<span class="placeholder">请选择有效模式</span>';
+        }
     }
 
     function loadSample() {
@@ -759,11 +824,12 @@
         inputEl.value = '';
         translationEl.value = '';
         outputEl.innerHTML = '<span class="placeholder">等待生成…</span>';
-        outputPlainEl.innerHTML = '<span class="placeholder">纯值列表</span>';
+        outputPlainEl.innerHTML = '<span class="placeholder">请选择模式</span>';
         outputBadge.textContent = '就绪';
         outputCount.textContent = '条数: 0';
     }
 
+    // 复制左侧结果
     function copyResult() {
         const text = outputEl.textContent;
         if (!text || text.includes('等待生成') || text.includes('未检测到')) {
@@ -775,6 +841,39 @@
         } else {
             fallbackCopy(text);
         }
+    }
+
+    // 复制右侧 SQL 模板
+    function copyTemplateResult() {
+        const text = outputPlainEl.textContent;
+        if (!text || text.includes('请选择模式') || text.includes('请先输入数据')) {
+            showToast('⚠️ 没有可复制的模板内容');
+            return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => showToast('✅ 模板已复制到剪贴板！')).catch(() => fallbackCopyTemplate(text));
+        } else {
+            fallbackCopyTemplate(text);
+        }
+    }
+
+    function fallbackCopyTemplate(text) {
+        const range = document.createRange();
+        range.selectNodeContents(outputPlainEl);
+        const sel = window.getSelection();
+        if (!sel) {
+            showToast('❌ 复制失败，请手动复制');
+            return;
+        }
+        sel.removeAllRanges();
+        sel.addRange(range);
+        try {
+            document.execCommand('copy');
+            showToast('✅ 模板已复制到剪贴板！');
+        } catch (_) {
+            showToast('❌ 复制失败，请手动选中内容复制');
+        }
+        sel.removeAllRanges();
     }
 
     function fallbackCopy(text) {
@@ -811,6 +910,8 @@
     //  事件绑定
     // ============================================================
     inputEl.addEventListener('input', convert);
+
+    sqlModeSelect.addEventListener('change', convert);
 
     document.querySelectorAll('input[type="radio"], input[type="checkbox"], input[type="number"]').forEach(el => {
         el.addEventListener('change', function() {
