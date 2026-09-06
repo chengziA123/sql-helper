@@ -169,7 +169,7 @@
     }
 
     function getLayout() {
-        return document.querySelector('input[name="layout"]:checked').value; // 'vertical' or 'horizontal'
+        return document.querySelector('input[name="layout"]:checked').value;
     }
 
     function getIndent() {
@@ -179,7 +179,6 @@
 
     function parseInput() {
         const raw = document.getElementById('inputData').value;
-        // 按多种分隔符拆分：换行、逗号（中英文）、空格、制表符
         let items = raw.split(/[\n,，、\t\s]+/).map(s => s.trim()).filter(s => s !== '');
         if (document.getElementById('removeDuplicates').checked) {
             items = [...new Set(items)];
@@ -203,26 +202,20 @@
         const indent = getIndent();
         const indentStr = ' '.repeat(indent);
 
-        // 包裹每个值
         const wrapped = items.map(item => `${quote}${item}${quote}`);
 
         let result = '';
         if (layout === 'vertical') {
-            // 竖向：每行一个，前面加缩进
             const lines = wrapped.map(val => `${indentStr}${val}`);
             result = lines.join(',\n');
-        } else { // horizontal
-            // 横向：同一行，用逗号+空格分隔
+        } else {
             result = wrapped.join(', ');
         }
 
-        // 是否包裹成 IN (...)
         if (document.getElementById('wrapInClause').checked) {
             if (layout === 'vertical') {
-                // 竖向：IN (\n  值,\n  值\n)
                 result = `IN (\n${result}\n)`;
             } else {
-                // 横向：IN (值1, 值2)
                 result = `IN (${result})`;
             }
         }
@@ -292,7 +285,6 @@
         }, 2000);
     }
 
-    // 快捷键 Ctrl+Enter 生成
     document.getElementById('inputData').addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
             e.preventDefault();
@@ -300,7 +292,6 @@
         }
     });
 
-    // 自动重新生成
     document.querySelectorAll('input[type="radio"], input[type="checkbox"], input[type="number"]').forEach(el => {
         el.addEventListener('change', function() {
             const outputDiv = document.getElementById('output');
@@ -310,6 +301,5 @@
         });
     });
 </script>
-
 </body>
 </html>
