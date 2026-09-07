@@ -548,7 +548,7 @@
     <!-- ---------- 头部 ---------- -->
     <header class="app-header">
         <h1>
-            🧰 SQL工具
+            🧰 SQL 值批量包裹工具
             <small>单/双引号 · 竖/横向</small>
         </h1>
         <span class="header-badge">⚡ 快捷 · 开源</span>
@@ -616,10 +616,10 @@
                     <span class="badge" style="align-self: flex-start;">支持多种分隔符</span>
                 </div>
 
-                <!-- 双栏输入：左侧原始数据，右侧英文翻译 -->
+                <!-- 双栏输入：左侧原始数据，右侧中英互译 -->
                 <div class="split-panel">
                     <textarea id="inputData" placeholder="粘贴原始数据，例如：P76DMWPAW4, P76DMWPAW6, P76AMKTK39 … 或每行一个"></textarea>
-                    <textarea id="translationOutput" class="translation-box" placeholder="英文翻译" readonly></textarea>
+                    <textarea id="translationOutput" class="translation-box" placeholder="自动翻译（中文 ⇄ 英文）" readonly></textarea>
                 </div>
             </section>
 
@@ -686,18 +686,30 @@
     const toastEl = document.getElementById('toast');
     const sqlModeSelect = document.getElementById('sqlMode');
 
-    // ---------- 翻译功能（多翻译源自动切换，避免单一服务不可用） ----------
+    // ---------- 翻译功能（中英自动互译 + 多源切换，避免单一服务不可用） ----------
     let translateTimer = null;          // 防抖定时器
     let translateSeq = 0;               // 请求序号：防止旧响应覆盖新输入
     let translateAbort = null;          // 当前请求控制器：新输入时取消旧请求
+
+    // 语言方向自动识别：输入含中文 → 中译英；否则（英文等）→ 英译中
+    function detectLangDir(text) {
+        return /[\u4e00-\u9fff]/.test(text)
+            ? { src: 'zh', tgt: 'en' }
+            : { src: 'en', tgt: 'zh' };
+    }
+    // 部分接口用 zh-CN 表示简体中文
+    function zhCode(code) {
+        return code === 'zh' ? 'zh-CN' : code;
+    }
 
     // 候选翻译源：按顺序尝试，前一个失败自动切换下一个
     const TRANSLATE_SOURCES = [
         {
             name: 'MyMemory',
-            request(text, signal) {
+            request(text, signal, dir) {
                 const url = 'https://api.mymemory.translated.net/get?q=' +
-                    encodeURIComponent(text) + '&langpair=zh|en';
+                    encodeURIComponent(text) +
+                    '&langpair=' + zhCode(dir.src) + '|' + zhCode(dir.tgt);
                 return fetch(url, { signal }).then(res => {
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     return res.json();
@@ -710,12 +722,12 @@
         },
         {
             name: 'LibreTranslate',
-            request(text, signal) {
+            request(text, signal, dir) {
                 return fetch('https://libretranslate.de/translate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     signal,
-                    body: JSON.stringify({ q: text, source: 'zh', target: 'en', format: 'text' })
+                    body: JSON.stringify({ q: text, source: dir.src, target: dir.tgt, format: 'text' })
                 }).then(res => {
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     return res.json();
@@ -727,8 +739,9 @@
         },
         {
             name: 'Google',
-            request(text, signal) {
-                const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=' +
+            request(text, signal, dir) {
+                const url = 'https://translate.googleapis.com/translate_a/single?client=gtx' +
+                    '&sl=' + zhCode(dir.src) + '&tl=' + zhCode(dir.tgt) + '&dt=t&q=' +
                     encodeURIComponent(text);
                 return fetch(url, { signal }).then(res => {
                     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -749,6 +762,9 @@
             return;
         }
 
+        // 自动判断翻译方向（中 ↔ 英）
+        const dir = detectLangDir(text);
+
         // 新输入到来：作废上一次请求，避免旧结果覆盖新内容
         const seq = ++translateSeq;
         if (translateAbort) translateAbort.abort();
@@ -762,7 +778,7 @@
                 translateAbort = ctrl;
                 const timer = setTimeout(() => ctrl.abort(), TRANSLATE_TIMEOUT);
                 try {
-                    const result = await source.request(text, ctrl.signal);
+                    const result = await source.request(text, ctrl.signal, dir);
                     clearTimeout(timer);
                     if (seq === translateSeq) translationEl.value = result;
                     return;
