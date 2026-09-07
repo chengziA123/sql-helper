@@ -579,8 +579,8 @@
 
             <div class="option-group">
                 <span class="group-label">输出排列</span>
-                <label><input type="radio" name="layout" value="vertical" checked /> 竖向</label>
-                <label><input type="radio" name="layout" value="horizontal" /> 横向</label>
+                <label><input type="radio" name="layout" value="vertical" checked /> 竖向（每行一个）</label>
+                <label><input type="radio" name="layout" value="horizontal" /> 横向（同一行）</label>
             </div>
 
             <div class="option-group">
@@ -626,15 +626,15 @@
 
             <!-- ===== Output Card ===== -->
             <section class="card card-output">
-                <!-- ===== 头部单行 flex：左（复制+快捷键），中（flex:1，查询+复制模板，左对齐，并整体右移16ch），右（结果+条数+就绪，右对齐） ===== -->
+                <!-- ===== 头部单行 flex：左（复制+快捷键），中（flex:1，查询+复制模板，左对齐，并整体右移32ch），右（结果+条数+就绪，右对齐） ===== -->
                 <div class="card-header" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
                     <!-- 左 -->
                     <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto;">
                         <button class="btn btn-success btn-sm" onclick="copyResult()">📄 复制</button>
                         <span class="footer-hint" style="margin: 0; font-size: 10px; color: #7a8fa6; display: inline-flex; align-items: center; gap: 3px;">快捷键 <kbd style="background: #eef2f6; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; color: #334e68; border: 1px solid #e2e8f0;">Ctrl+Enter</kbd> 生成</span>
                     </div>
-                    <!-- 中：flex:1，左对齐，增加 padding-left: 16ch 实现整体右移两个8ch -->
-                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; justify-content: flex-start; padding-left: 16ch;">
+                    <!-- 中：flex:1，左对齐，padding-left: 32ch (40ch - 8ch) -->
+                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; justify-content: flex-start; padding-left: 32ch;">
                         <select id="sqlMode" class="mode-select">
                             <option value="select">查询</option>
                             <option value="insert">增加</option>
