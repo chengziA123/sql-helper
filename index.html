@@ -686,7 +686,7 @@
     const toastEl = document.getElementById('toast');
     const sqlModeSelect = document.getElementById('sqlMode');
 
-    // ---------- 翻译功能（中英自动互译 + 多源切换，避免单一服务不可用） ----------
+    // ---------- 翻译功能（中英自动互译：单词展示多个候选 + 多源切换） ----------
     let translateTimer = null;          // 防抖定时器
     let translateSeq = 0;               // 请求序号：防止旧响应覆盖新输入
     let translateAbort = null;          // 当前请求控制器：新输入时取消旧请求
@@ -702,8 +702,34 @@
         return code === 'zh' ? 'zh-CN' : code;
     }
 
+    // 翻译候选写法：单个英文单词时补一个全小写形式，
+    // 避免 "Gray" 这类词只按人名音译（格雷），漏掉普通词义（灰色）
+    function buildVariants(text, dir) {
+        const variants = [text];
+        if (dir.src === 'en' && /^[A-Za-z]+$/.test(text)) {
+            const lower = text.toLowerCase();
+            if (lower !== text && variants.indexOf(lower) < 0) variants.push(lower);
+        }
+        return variants;
+    }
+
     // 候选翻译源：按顺序尝试，前一个失败自动切换下一个
     const TRANSLATE_SOURCES = [
+        {
+            name: 'Google',
+            request(text, signal, dir) {
+                const url = 'https://translate.googleapis.com/translate_a/single?client=gtx' +
+                    '&sl=' + zhCode(dir.src) + '&tl=' + zhCode(dir.tgt) + '&dt=t&q=' +
+                    encodeURIComponent(text);
+                return fetch(url, { signal }).then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                }).then(data => {
+                    if (!data || !Array.isArray(data[0])) throw new Error('empty');
+                    return data[0].map(seg => (seg && seg[0]) || '').join('');
+                });
+            }
+        },
         {
             name: 'MyMemory',
             request(text, signal, dir) {
@@ -736,21 +762,6 @@
                     return data.translatedText;
                 });
             }
-        },
-        {
-            name: 'Google',
-            request(text, signal, dir) {
-                const url = 'https://translate.googleapis.com/translate_a/single?client=gtx' +
-                    '&sl=' + zhCode(dir.src) + '&tl=' + zhCode(dir.tgt) + '&dt=t&q=' +
-                    encodeURIComponent(text);
-                return fetch(url, { signal }).then(res => {
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    return res.json();
-                }).then(data => {
-                    if (!data || !Array.isArray(data[0])) throw new Error('empty');
-                    return data[0].map(seg => (seg && seg[0]) || '').join('');
-                });
-            }
         }
     ];
 
@@ -762,8 +773,9 @@
             return;
         }
 
-        // 自动判断翻译方向（中 ↔ 英）
+        // 自动判断翻译方向（中 ↔ 英），并生成候选写法
         const dir = detectLangDir(text);
+        const variants = buildVariants(text, dir);
 
         // 新输入到来：作废上一次请求，避免旧结果覆盖新内容
         const seq = ++translateSeq;
@@ -772,23 +784,34 @@
         translationEl.value = '⏳ 翻译中…';
 
         (async () => {
-            for (const source of TRANSLATE_SOURCES) {
-                if (seq !== translateSeq) return; // 已被新输入取代，直接放弃
-                const ctrl = new AbortController();
-                translateAbort = ctrl;
-                const timer = setTimeout(() => ctrl.abort(), TRANSLATE_TIMEOUT);
-                try {
-                    const result = await source.request(text, ctrl.signal, dir);
-                    clearTimeout(timer);
-                    if (seq === translateSeq) translationEl.value = result;
-                    return;
-                } catch (err) {
-                    clearTimeout(timer);
-                    console.warn('翻译源 ' + source.name + ' 不可用，尝试下一个:', err);
+            const results = [];
+            const seen = new Set();
+            for (const v of variants) {
+                if (seq !== translateSeq) return; // 已被新输入取代
+                for (const source of TRANSLATE_SOURCES) {
+                    if (seq !== translateSeq) return;
+                    const ctrl = new AbortController();
+                    translateAbort = ctrl;
+                    const timer = setTimeout(() => ctrl.abort(), TRANSLATE_TIMEOUT);
+                    try {
+                        const r = await source.request(v, ctrl.signal, dir);
+                        clearTimeout(timer);
+                        if (r && !seen.has(r)) { seen.add(r); results.push(r); }
+                        break; // 该写法已成功翻译，换下一个写法
+                    } catch (err) {
+                        clearTimeout(timer);
+                        console.warn('翻译源 ' + source.name + ' 不可用，尝试下一个:', err);
+                    }
                 }
+                if (results.length >= 2) break; // 最多展示 2 个候选结果
             }
-            if (seq === translateSeq) {
+            if (seq !== translateSeq) return;
+            if (results.length === 0) {
                 translationEl.value = '⚠️ 翻译服务暂时不可用，请检查网络后重试（已自动尝试多个翻译源）';
+            } else if (results.length === 1) {
+                translationEl.value = results[0];
+            } else {
+                translationEl.value = results.map((r, i) => (i + 1) + '. ' + r).join('\n');
             }
         })();
     }
