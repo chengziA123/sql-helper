@@ -536,6 +536,18 @@
                 padding: 6px 8px;
             }
         }
+        /* ---------- 左下角版本号 ---------- */
+        .app-version {
+            position: fixed;
+            left: 8px;
+            bottom: 8px;
+            font-size: 11px;
+            color: var(--text-muted);
+            opacity: 0.85;
+            z-index: 999;
+            pointer-events: none;
+            user-select: none;
+        }
     </style>
 </head>
 
@@ -664,6 +676,7 @@
     <footer class="app-footer">
         🛠️ SQL工具 · 优化版 · 自由使用
     </footer>
+    <div class="app-version">v1.0.0</div>
 </div>
 
 <!-- ===== Toast 容器 ===== -->
