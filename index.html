@@ -676,7 +676,7 @@
     <footer class="app-footer">
         🛠️ SQL工具 · 优化版 · 自由使用
     </footer>
-    <div class="app-version">v1.2.0</div>
+    <div class="app-version">v1.2.1</div>
 </div>
 
 <!-- ===== Toast 容器 ===== -->
@@ -936,10 +936,12 @@
         translationEl.value = '⏳ 翻译中…';
 
         (async () => {
-            // 1) 单个词：优先尝试“词典式多词义”
+            // 1) 单个词：优先尝试“多词义”，拿不到多词义绝不提前结束
             if (isSingleWord(text)) {
-                // 1.1 后端官方接口（有道 explains 多词义 + 百度）
-                {
+                let singleFallback = ''; // 各家给的单译文，最后兜底用
+
+                // 1.1 后端官方接口（有道 explains + 百度）——未配置时自动跳过
+                if (TRANSLATE_API.indexOf('YOUR-PROJECT') < 0) {
                     const ctrl = new AbortController();
                     translateAbort = ctrl;
                     const timer = setTimeout(() => ctrl.abort(), TRANSLATE_TIMEOUT);
@@ -959,15 +961,15 @@
                             translationEl.value = uniq.map((t, i) => (i + 1) + '. ' + t).join('\n');
                             return;
                         } else if (uniq.length === 1) {
-                            translationEl.value = uniq[0];
-                            return;
+                            singleFallback = uniq[0]; // 只有单条，先留着，继续找多词义
                         }
                     } catch (err) {
                         clearTimeout(timer);
                         console.warn('后端翻译接口不可用:', err);
                     }
                 }
-                // 1.2 谷歌词典
+
+                // 1.2 谷歌词典：解析出“多词义”才直接返回；否则继续（不再用单译文提前返回）
                 {
                     const ctrl = new AbortController();
                     translateAbort = ctrl;
@@ -981,17 +983,14 @@
                             translationEl.value = renderDictGroups(groups);
                             return;
                         }
-                        const primary = googlePrimaryText(data);
-                        if (primary) {
-                            translationEl.value = primary;
-                            return;
-                        }
+                        if (!singleFallback) singleFallback = googlePrimaryText(data);
                     } catch (err) {
                         clearTimeout(timer);
                         console.warn('谷歌词典不可用:', err);
                     }
                 }
-                // 1.3 英文单词：有道词典（免密钥 JSONP）
+
+                // 1.3 英文单词：有道词典（免密钥 JSONP，给多词义）
                 if (dir.src === 'en') {
                     try {
                         const data = await youdaoDict(text, TRANSLATE_TIMEOUT);
@@ -1004,6 +1003,12 @@
                     } catch (err) {
                         console.warn('有道词典不可用:', err);
                     }
+                }
+
+                // 1.4 各家都没给出多词义时，才用最佳单译文
+                if (singleFallback) {
+                    translationEl.value = singleFallback;
+                    return;
                 }
             }
 
@@ -1040,7 +1045,6 @@
             }
         })();
     }
-
     function debouncedTranslate() {
         clearTimeout(translateTimer);
         const text = inputEl.value;
