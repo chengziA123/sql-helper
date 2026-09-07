@@ -686,40 +686,95 @@
     const toastEl = document.getElementById('toast');
     const sqlModeSelect = document.getElementById('sqlMode');
 
-    // ---------- 翻译功能（使用 LibreTranslate 公共 API，更稳定） ----------
-    let translateTimer = null; // 防抖定时器
+    // ---------- 翻译功能（多翻译源自动切换，避免单一服务不可用） ----------
+    let translateTimer = null;          // 防抖定时器
+    let translateSeq = 0;               // 请求序号：防止旧响应覆盖新输入
+    let translateAbort = null;          // 当前请求控制器：新输入时取消旧请求
+
+    // 候选翻译源：按顺序尝试，前一个失败自动切换下一个
+    const TRANSLATE_SOURCES = [
+        {
+            name: 'MyMemory',
+            request(text, signal) {
+                const url = 'https://api.mymemory.translated.net/get?q=' +
+                    encodeURIComponent(text) + '&langpair=zh|en';
+                return fetch(url, { signal }).then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                }).then(data => {
+                    const t = data && data.responseData && data.responseData.translatedText;
+                    if (!t) throw new Error('empty');
+                    return t;
+                });
+            }
+        },
+        {
+            name: 'LibreTranslate',
+            request(text, signal) {
+                return fetch('https://libretranslate.de/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal,
+                    body: JSON.stringify({ q: text, source: 'zh', target: 'en', format: 'text' })
+                }).then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                }).then(data => {
+                    if (!data || !data.translatedText) throw new Error('empty');
+                    return data.translatedText;
+                });
+            }
+        },
+        {
+            name: 'Google',
+            request(text, signal) {
+                const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=' +
+                    encodeURIComponent(text);
+                return fetch(url, { signal }).then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                }).then(data => {
+                    if (!data || !Array.isArray(data[0])) throw new Error('empty');
+                    return data[0].map(seg => (seg && seg[0]) || '').join('');
+                });
+            }
+        }
+    ];
+
+    const TRANSLATE_TIMEOUT = 8000; // 每个翻译源最长等待时间(毫秒)
 
     function translateText(text) {
         if (!text || text.trim() === '') {
             translationEl.value = '';
             return;
         }
-        const url = 'https://libretranslate.de/translate';
-        fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                q: text,
-                source: 'zh',
-                target: 'en',
-                format: 'text'
-            })
-        })
-            .then(res => {
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json();
-            })
-            .then(data => {
-                if (data && data.translatedText) {
-                    translationEl.value = data.translatedText;
-                } else {
-                    translationEl.value = '⚠️ 翻译结果为空';
+
+        // 新输入到来：作废上一次请求，避免旧结果覆盖新内容
+        const seq = ++translateSeq;
+        if (translateAbort) translateAbort.abort();
+
+        translationEl.value = '⏳ 翻译中…';
+
+        (async () => {
+            for (const source of TRANSLATE_SOURCES) {
+                if (seq !== translateSeq) return; // 已被新输入取代，直接放弃
+                const ctrl = new AbortController();
+                translateAbort = ctrl;
+                const timer = setTimeout(() => ctrl.abort(), TRANSLATE_TIMEOUT);
+                try {
+                    const result = await source.request(text, ctrl.signal);
+                    clearTimeout(timer);
+                    if (seq === translateSeq) translationEl.value = result;
+                    return;
+                } catch (err) {
+                    clearTimeout(timer);
+                    console.warn('翻译源 ' + source.name + ' 不可用，尝试下一个:', err);
                 }
-            })
-            .catch(err => {
-                console.warn('翻译请求失败:', err);
-                translationEl.value = '⚠️ 翻译服务暂时不可用';
-            });
+            }
+            if (seq === translateSeq) {
+                translationEl.value = '⚠️ 翻译服务暂时不可用，请检查网络后重试（已自动尝试多个翻译源）';
+            }
+        })();
     }
 
     function debouncedTranslate() {
