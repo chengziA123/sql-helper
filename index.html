@@ -686,7 +686,7 @@
     const toastEl = document.getElementById('toast');
     const sqlModeSelect = document.getElementById('sqlMode');
 
-    // ---------- 翻译功能（中英自动互译：单词展示多个候选 + 多源切换） ----------
+    // ---------- 翻译功能（中英自动互译：单词词典式多词义 + 多源切换） ----------
     let translateTimer = null;          // 防抖定时器
     let translateSeq = 0;               // 请求序号：防止旧响应覆盖新输入
     let translateAbort = null;          // 当前请求控制器：新输入时取消旧请求
@@ -702,8 +702,12 @@
         return code === 'zh' ? 'zh-CN' : code;
     }
 
-    // 翻译候选写法：单个英文单词时补一个全小写形式，
-    // 避免 "Gray" 这类词只按人名音译（格雷），漏掉普通词义（灰色）
+    // 是否单个词（仅英文字母，或仅汉字）
+    function isSingleWord(text) {
+        return /^[A-Za-z]+$/.test(text) || /^[\u4e00-\u9fff]+$/.test(text);
+    }
+
+    // 候选写法：单个英文单词时补一个全小写形式，作为回退方案使用
     function buildVariants(text, dir) {
         const variants = [text];
         if (dir.src === 'en' && /^[A-Za-z]+$/.test(text)) {
@@ -711,6 +715,53 @@
             if (lower !== text && variants.indexOf(lower) < 0) variants.push(lower);
         }
         return variants;
+    }
+
+    // 请求谷歌翻译完整数据（含词典部分 dt=bd）
+    function fetchGoogleFull(text, signal, dir) {
+        const url = 'https://translate.googleapis.com/translate_a/single?client=gtx' +
+            '&sl=' + zhCode(dir.src) + '&tl=' + zhCode(dir.tgt) +
+            '&dt=t&dt=bd&q=' + encodeURIComponent(text);
+        return fetch(url, { signal }).then(res => {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        });
+    }
+
+    // 从谷歌返回中解析词典词义：按“词性”分组
+    function parseGoogleDict(data) {
+        const groups = [];                       // [{pos, terms:[...]}]
+        const dict = (data && Array.isArray(data[1])) ? data[1] : null;
+        if (!dict) return groups;
+        for (const entry of dict) {
+            if (!Array.isArray(entry) || !Array.isArray(entry[1])) continue;
+            for (const g of entry[1]) {
+                if (!Array.isArray(g)) continue;
+                const pos = (typeof g[0] === 'string') ? g[0].trim() : '';
+                const rawTerms = Array.isArray(g[1]) ? g[1] : [];
+                const terms = [];
+                for (const t of rawTerms) {
+                    const term = (Array.isArray(t) && t[0]) ? String(t[0]).trim() : null;
+                    if (term && terms.indexOf(term) < 0) terms.push(term);
+                    if (terms.length >= 5) break;
+                }
+                if (terms.length) groups.push({ pos: pos, terms: terms });
+                if (groups.length >= 6) break;
+            }
+            if (groups.length >= 6) break;
+        }
+        return groups;
+    }
+
+    // 从谷歌返回中取“主译文”（无词典时的回退）
+    function googlePrimaryText(data) {
+        if (!data || !Array.isArray(data[0])) return '';
+        return data[0].map(seg => (seg && seg[0]) || '').join('');
+    }
+
+    // 把词义分组渲染成多行文本
+    function renderDictGroups(groups) {
+        return groups.map(g => (g.pos ? g.pos + '：' : '') + g.terms.join('、')).join('\n');
     }
 
     // 候选翻译源：按顺序尝试，前一个失败自动切换下一个
@@ -773,9 +824,7 @@
             return;
         }
 
-        // 自动判断翻译方向（中 ↔ 英），并生成候选写法
         const dir = detectLangDir(text);
-        const variants = buildVariants(text, dir);
 
         // 新输入到来：作废上一次请求，避免旧结果覆盖新内容
         const seq = ++translateSeq;
@@ -784,10 +833,37 @@
         translationEl.value = '⏳ 翻译中…';
 
         (async () => {
+            // 1) 单个词：优先尝试“词典式多词义”
+            if (isSingleWord(text)) {
+                const ctrl = new AbortController();
+                translateAbort = ctrl;
+                const timer = setTimeout(() => ctrl.abort(), TRANSLATE_TIMEOUT);
+                try {
+                    const data = await fetchGoogleFull(text, ctrl.signal, dir);
+                    clearTimeout(timer);
+                    if (seq !== translateSeq) return;
+                    const groups = parseGoogleDict(data);
+                    if (groups.length) {
+                        translationEl.value = renderDictGroups(groups);
+                        return;
+                    }
+                    const primary = googlePrimaryText(data);
+                    if (primary) {
+                        translationEl.value = primary;
+                        return;
+                    }
+                } catch (err) {
+                    clearTimeout(timer);
+                    console.warn('词典式解析失败，回退多源翻译:', err);
+                }
+            }
+
+            // 2) 回退：多源 + 大小写变体
+            const variants = buildVariants(text, dir);
             const results = [];
             const seen = new Set();
             for (const v of variants) {
-                if (seq !== translateSeq) return; // 已被新输入取代
+                if (seq !== translateSeq) return;
                 for (const source of TRANSLATE_SOURCES) {
                     if (seq !== translateSeq) return;
                     const ctrl = new AbortController();
@@ -797,13 +873,13 @@
                         const r = await source.request(v, ctrl.signal, dir);
                         clearTimeout(timer);
                         if (r && !seen.has(r)) { seen.add(r); results.push(r); }
-                        break; // 该写法已成功翻译，换下一个写法
+                        break;
                     } catch (err) {
                         clearTimeout(timer);
                         console.warn('翻译源 ' + source.name + ' 不可用，尝试下一个:', err);
                     }
                 }
-                if (results.length >= 2) break; // 最多展示 2 个候选结果
+                if (results.length >= 2) break;
             }
             if (seq !== translateSeq) return;
             if (results.length === 0) {
